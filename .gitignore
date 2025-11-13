@@ -1,0 +1,83 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.pkl
+*.pickle
+misc/
+# Virtual environments
+AI_Chatbot/chatbot
+
+# Environments from user tools
+*.env
+*.env.*
+
+# Byte-compiled
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# -------------------------
+# Project-specific
+# -------------------------
+# Cache folders
+cache/
+*cache*/
+*.checkpoint
+
+# Qdrant local database (if you ever run local qdrant)
+qdrant_storage/
+qdrant/
+
+# Stock/news data
+data/*.json
+
+# Logs
+logs/
+*.log
+
+# Streamlit
+.streamlit/
+**/.streamlit/
+
+# LangChain / LangGraph temp files
+*.lc
+**/langchain*/cache/
+**/langgraph*/cache/
+
+# -------------------------
+# VS Code
+# -------------------------
+.vscode/
+settings.json
+
+# -------------------------
+# macOS
+# -------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# -------------------------
+# Docker
+# -------------------------
+docker-compose*.yaml
+Dockerfile
+*.tar
+*.img
+
+# -------------------------
+# Builds / distributions
+# -------------------------
+build/
+dist/
+*.egg-info/
+*.whl
