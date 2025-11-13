@@ -28,16 +28,15 @@ Features
 Project structure
 -----------------
 
-AI-Financial-News-agent-with-RAG/
-├── AI_Chatbot/
-│   ├── clients/          # Qdrant client, Yahoo data fetcher
-│   ├── pipeline/         # LangGraph nodes (search, summarize, fetch, format)
-│   ├── misc/             # shared helpers and utilities
-│   └── app_streamlit.py  # Streamlit UI
-├── rag_stock_chatbot.py  # API-style script runner
-├── Dockerfile
-├── requirements.txt
-└── README.md
+- AI_Chatbot/
+	- clients/ — Qdrant client, Yahoo data fetcher
+	- pipeline/ — LangGraph nodes (search, summarize, fetch, format)
+	- misc/ — shared helpers and utilities
+	- app_streamlit.py — Streamlit UI entrypoint
+- rag_stock_chatbot.py — script-style runner for programmatic usage
+- Dockerfile — container build instructions
+- requirements.txt — Python dependencies
+- README.md — this file
 
 Installation
 ------------
