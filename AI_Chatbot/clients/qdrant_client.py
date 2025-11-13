@@ -1,8 +1,7 @@
-"""
-AI_Chatbot/clients/qdrant_client.py
-────────────────────────────────────
-Initializes Qdrant client, ensures collection existence,
-and optionally seeds data from JSON when app starts.
+"""AI Qdrant client utilities.
+
+Provides functions to initialize the Qdrant client, ensure the collection
+exists, and seed it from a JSON file if necessary.
 """
 
 import os
@@ -33,16 +32,16 @@ def ensure_collection_exists():
         collections = qdrant.get_collections().collections
         existing = [c.name for c in collections]
         if COLLECTION_NAME not in existing:
-            print(f"[QDRANT] ⚙️ Creating collection '{COLLECTION_NAME}' ({VECTOR_SIZE}-dim, cosine metric)...")
+            print(f"Qdrant: creating collection '{COLLECTION_NAME}' ({VECTOR_SIZE}-dim, cosine metric)")
             qdrant.recreate_collection(
                 collection_name=COLLECTION_NAME,
                 vectors_config=rest.VectorParams(size=VECTOR_SIZE, distance=rest.Distance.COSINE),
             )
-            print(f"[QDRANT] ✅ Created collection '{COLLECTION_NAME}'.")
+            print(f"Qdrant: created collection '{COLLECTION_NAME}'.")
         else:
-            print(f"[QDRANT] ✅ Collection '{COLLECTION_NAME}' already exists.")
+            print(f"Qdrant: collection '{COLLECTION_NAME}' already exists.")
     except Exception as e:
-        print(f"[QDRANT] ❌ Failed to verify collection: {e}")
+        print(f"Qdrant: failed to verify collection: {e}")
 
 
 def seed_from_json():
@@ -50,21 +49,21 @@ def seed_from_json():
     try:
         count = qdrant.count(COLLECTION_NAME).count
         if count > 0:
-            print(f"[QDRANT] 🟢 '{COLLECTION_NAME}' already has {count} points.")
+            print(f"Qdrant: '{COLLECTION_NAME}' already has {count} points.")
             return
 
         if not os.path.exists(SEED_FILE):
-            print(f"[QDRANT] ⚠️ No seed file found at {SEED_FILE}. Skipping seeding.")
+            print(f"Qdrant: no seed file found at {SEED_FILE}; skipping seeding")
             return
 
         with open(SEED_FILE, "r") as f:
             data = json.load(f)
 
         if not isinstance(data, list):
-            print("[QDRANT] ⚠️ Invalid JSON format (expected list of docs).")
+            print("Qdrant: invalid JSON format (expected list of documents)")
             return
 
-        print(f"[QDRANT] 🚀 Seeding {len(data)} documents into '{COLLECTION_NAME}'...")
+        print(f"Qdrant: seeding {len(data)} documents into '{COLLECTION_NAME}'")
         points = []
         for i, doc in enumerate(data):
             text = f"{doc.get('title', '')} {doc.get('full_text', '')}"
@@ -82,20 +81,19 @@ def seed_from_json():
             )
 
         qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
-        print(f"[QDRANT] ✅ Inserted {len(points)} documents successfully.")
+        print(f"Qdrant: inserted {len(points)} documents")
     except Exception as e:
-        print(f"[QDRANT] ❌ Seeding failed: {e}")
+        print(f"Qdrant: seeding failed: {e}")
 
 
 # ─────────────────────────────────────────────
 # Bootstrap routine (called automatically)
 # ─────────────────────────────────────────────
 def initialize_qdrant():
-    """Run all initialization steps."""
+    """Run Qdrant initialization steps and return the client."""
     ensure_collection_exists()
     seed_from_json()
     return qdrant
 
 
-# Run automatically when imported
 qdrant = initialize_qdrant()

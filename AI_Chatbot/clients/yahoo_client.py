@@ -1,42 +1,39 @@
-# AI_Chatbot/clients/yahoo_client.py
+"""Yahoo Finance news fetcher utilities.
+
+Provides a helper that returns recent Yahoo Finance news articles for a
+given ticker or comma-separated tickers. The function normalizes the
+tool output and attempts to scrape article bodies when a link is available.
+"""
 
 from bs4 import BeautifulSoup
 import requests
 from langchain_community.tools.yahoo_finance_news import YahooFinanceNewsTool
 
-# Initialize once globally
+
+# Initialize the Yahoo news tool once.
 yahoo_news_tool = YahooFinanceNewsTool()
 
+
 def get_yahoo_news(ticker: str, num_articles: int = 5):
-    """
-    Fetch recent Yahoo Finance news articles for one or more tickers.
-    Handles malformed tickers, multi-ticker inputs, and HTML scraping.
-    Returns a normalized list of article dicts for downstream summarization.
+    """Return a list of normalized article dictionaries for the ticker.
+
+    Each dict contains: ticker, title, link, summary (snippet), and
+    full_text (when scraping succeeds).
     """
     parsed_articles = []
     tickers = [t.strip().upper() for t in ticker.split(",") if t.strip()]
 
     for t in tickers:
         try:
-            # ✅ Correct input: YahooFinanceNewsTool expects "query"
-            raw_articles = yahoo_news_tool.run({
-                "query": t,
-                "num_articles": num_articles
-            })
+            raw_articles = yahoo_news_tool.run({"query": t, "num_articles": num_articles})
         except Exception as e:
-            print(f"[ERROR] YahooFinanceNewsTool failed for {t}: {e}")
+            print(f"Yahoo: tool failed for {t}: {e}")
             continue
 
-        # Handle tool returning string (error or info message)
-        if isinstance(raw_articles, str):
-            print(f"[INFO] YahooFinanceNewsTool returned string output for {t}.")
+        if isinstance(raw_articles, str) or not raw_articles:
+            # Tool may return a string message or an empty result.
             continue
 
-        if not raw_articles:
-            print(f"[WARN] No Yahoo articles found for {t}")
-            continue
-
-        # Parse each article result
         for item in raw_articles:
             if not isinstance(item, dict):
                 continue
@@ -46,7 +43,6 @@ def get_yahoo_news(ticker: str, num_articles: int = 5):
             if not link:
                 continue
 
-            # Scrape the body text if possible
             full_text = ""
             try:
                 headers = {"User-Agent": "Mozilla/5.0 (compatible; StockBot/1.0)"}
@@ -55,21 +51,18 @@ def get_yahoo_news(ticker: str, num_articles: int = 5):
                     soup = BeautifulSoup(resp.text, "html.parser")
                     paragraphs = soup.select("article p") or soup.select("p")
                     full_text = " ".join(p.get_text(strip=True) for p in paragraphs[:15])
-            except Exception as e:
-                print(f"[WARN] Could not scrape article for {t}: {e}")
+            except Exception:
+                # Scraping failures are non-fatal; proceed with what we have.
+                full_text = item.get("summary", "") or ""
 
-            parsed_articles.append({
-                "ticker": t,
-                "title": title,
-                "link": link,
-                "summary": full_text[:500] if full_text else "",
-                "full_text": full_text or "",
-            })
-
-    # Summary logs
-    if parsed_articles:
-        print(f"[INFO] ✅ Retrieved {len(parsed_articles)} total articles for {', '.join(tickers)}")
-    else:
-        print(f"[WARN] ❌ Yahoo Finance returned no articles for {', '.join(tickers)}")
+            parsed_articles.append(
+                {
+                    "ticker": t,
+                    "title": title,
+                    "link": link,
+                    "summary": full_text[:500] if full_text else "",
+                    "full_text": full_text or "",
+                }
+            )
 
     return parsed_articles

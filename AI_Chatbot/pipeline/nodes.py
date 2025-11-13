@@ -1,3 +1,10 @@
+"""Pipeline nodes for the financial news RAG workflow.
+
+Each node is a pure function that accepts and returns a state dictionary.
+Nodes implement semantic search, summarization, ticker extraction, and
+news fetching with RSS fallback.
+"""
+
 from typing_extensions import TypedDict
 from qdrant_client import QdrantClient
 from google import genai
@@ -5,15 +12,17 @@ from google.genai import types
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
-import feedparser, requests, os
+import feedparser
+import requests
+import os
+
 from AI_Chatbot.clients.yahoo_client import get_yahoo_news
 
-# ─────────────────────────────────────────────
-# Load environment & model setup
-# ─────────────────────────────────────────────
+
+# Load environment and initialize clients
 load_dotenv()
 if not os.getenv("GEMINI_API_KEY"):
-    raise ValueError("❌ GEMINI_API_KEY not found. Create a .env file with GEMINI_API_KEY=your_key")
+    raise ValueError("GEMINI_API_KEY environment variable is required")
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_NAME = "gemini-2.0-flash"
@@ -25,6 +34,7 @@ collection_name = "news_embeddings"
 # Define pipeline state
 # ─────────────────────────────────────────────
 class PipelineState(TypedDict):
+    """TypedDict describing the pipeline state shape."""
     query: str
     retrieved_docs: list
     answer: str
@@ -37,7 +47,7 @@ class PipelineState(TypedDict):
 # 1️⃣ Semantic Search (RAG)
 # ─────────────────────────────────────────────
 def semantic_search(state: PipelineState) -> dict:
-    """Retrieve top-k docs with cosine similarity ≥ threshold."""
+    """Retrieve top-k documents from Qdrant using the query vector."""
     query = state["query"]
     query_vec = embedder.encode([query])[0].tolist()
 
@@ -50,7 +60,7 @@ def semantic_search(state: PipelineState) -> dict:
 
     filtered = [r for r in results if r.score >= 0.5]
     if not filtered:
-        print("[INFO] ❌ No docs found in RAG → fallback to Yahoo")
+        # No relevant documents found; caller should fallback to external sources
         return {"retrieved_docs": None}
 
     retrieved_docs = [
@@ -69,7 +79,7 @@ def semantic_search(state: PipelineState) -> dict:
 # 2️⃣ Summarize from RAG
 # ─────────────────────────────────────────────
 def summarize(state: PipelineState) -> dict:
-    """Use Gemini to answer strictly from retrieved context."""
+    """Use Gemini to answer using retrieved context from RAG."""
     query = state["query"]
     retrieved_docs = state.get("retrieved_docs", [])
 
@@ -119,7 +129,6 @@ def extract_ticker(state: PipelineState) -> dict:
     """
     query = state.get("query", "").strip()
     if not query:
-        print("[WARN] Empty query in extract_ticker.")
         return {"ticker": "N/A"}
 
     # ─────────────────────────────
@@ -152,8 +161,7 @@ Answer:
             config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=20),
         )
         raw_ticker = resp.text.strip() if resp and resp.text else "N/A"
-    except Exception as e:
-        print(f"[ERROR] extract_ticker failed: {e}")
+    except Exception:
         raw_ticker = "N/A"
 
     # ─────────────────────────────
@@ -179,13 +187,15 @@ Answer:
     # For consistency across APIs (yfinance + RSS)
     # Ensure all tickers are uppercased and have no whitespace
     clean_tickers = ",".join(sorted(set(tickers)))
-    print(f"[INFO] Extracted ticker(s): {clean_tickers}")
+    # Return normalized comma-separated tickers
+    return {"ticker": clean_tickers}
     return {"ticker": clean_tickers}
 
 # ─────────────────────────────────────────────
 # 4️⃣ Helper: RSS + Scraper
 # ─────────────────────────────────────────────
 def scrape_yahoo_article(url: str) -> str:
+    """Return the scraped article body for the given URL, or empty string."""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (compatible; StockBot/1.0)"}
         r = requests.get(url, headers=headers, timeout=8)
@@ -199,13 +209,12 @@ def scrape_yahoo_article(url: str) -> str:
             if desc and desc.get("content"):
                 text = desc["content"]
         return text.strip()
-    except Exception as e:
-        print(f"[WARN] Scrape failed for {url}: {e}")
+    except Exception:
         return ""
 
 
 def get_yahoo_rss_news(ticker: str, num_articles: int = 5):
-    """Fetch RSS feed as fallback (no API key)."""
+    """Fetch RSS feed entries for a ticker as a fallback source."""
     url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker.upper()}&region=US&lang=en-US"
     feed = feedparser.parse(url)
     if not feed.entries:
@@ -234,37 +243,32 @@ def yahoo_fetch_with_fallback(state: PipelineState) -> dict:
     """Try Yahoo Finance API first; if empty or error, fallback to RSS feed."""
     ticker = state.get("ticker", "N/A")
     if not ticker or ticker == "N/A":
-        print("[WARN] No ticker extracted → cannot fetch news")
         return {"fetched_articles": [], "source": "none"}
 
     all_articles = []
     source = "none"
 
-    # ① Try Yahoo API
+    # Try Yahoo API first
     try:
         articles = get_yahoo_news(ticker, num_articles=5)
         if isinstance(articles, list) and len(articles) > 0:
-            print(f"[INFO] ✅ Yahoo API returned {len(articles)} articles for {ticker}")
             return {"fetched_articles": articles, "source": "yahoo_api"}
         else:
-            print(f"[WARN] Yahoo API returned empty for {ticker}")
+            pass
     except Exception as e:
-        print(f"[ERROR] YahooFinanceNewsTool failed for {ticker}: {e}")
+        # proceed to RSS fallback on error
+        pass
 
-    # ② Fallback → Yahoo RSS feed
     try:
-        print(f"[INFO] ⤵️ Falling back to RSS for {ticker}")
         rss_articles = get_yahoo_rss_news(ticker, num_articles=5)
         if isinstance(rss_articles, list) and len(rss_articles) > 0:
-            print(f"[INFO] ✅ RSS fallback returned {len(rss_articles)} for {ticker}")
             return {"fetched_articles": rss_articles, "source": "rss_feed"}
         else:
-            print(f"[WARN] RSS returned empty for {ticker}")
+            pass
     except Exception as e:
-        print(f"[ERROR] RSS fetch failed for {ticker}: {e}")
+        pass
 
-    # ③ Nothing found
-    print(f"[FAIL] ❌ No news sources found for {ticker}")
+    # Nothing found
     return {"fetched_articles": [], "source": "none"}
 
 
@@ -272,7 +276,7 @@ def yahoo_fetch_with_fallback(state: PipelineState) -> dict:
 # 6️⃣ Summarize Articles (Yahoo or RSS)
 # ─────────────────────────────────────────────
 def summarize_articles(state: PipelineState) -> dict:
-    """Summarize fetched Yahoo/RSS articles for a ticker."""
+    """Summarize fetched Yahoo or RSS articles for the given ticker."""
     ticker = state.get("ticker", "Unknown")
     articles = state.get("fetched_articles", [])
     source = state.get("source", "unknown")
