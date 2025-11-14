@@ -134,8 +134,3 @@ Notes and troubleshooting
 - If you encounter LangGraph/runtime compatibility issues, consult the
 	project's docs and consider checking the graph/node return types.
 
-License
--------
-
-This project is provided under the terms specified in the repository. Refer
-to the project license file for details.
